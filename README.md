@@ -25,8 +25,9 @@
 # ![img](https://i-blog.csdnimg.cn/direct/88e8469c57a9462b8c197a2f6365d800.png)![img](https://i-blog.csdnimg.cn/direct/8dfaca673131451b8ea94e44ea27457f.png)
 
 # 如何使用
-正确导入依赖和填写用户自己登录的收藏夹id、User-Agent、Cookie、Referer到代码里即可使用
-<img width="2077" height="844" alt="image" src="https://github.com/user-attachments/assets/d44b168b-e725-440b-a04f-2bc043915468" />
+正确导入依赖和填写用户登录抖音后通过开发者工具获取的收藏夹id、User-Agent、Cookie、Referer到代码里即可使用
+<img width="2040" height="1000" alt="image" src="https://github.com/user-attachments/assets/73d51516-1169-4a3c-bbe1-4b89ff6373ed" />
+
 
 
 ## 环境准备

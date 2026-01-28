@@ -226,3 +226,6 @@ __marimo__/
 *.txt
 *.srt
 *.ass
+
+# 忽略IDE配置文件夹
+.idea/

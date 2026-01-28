@@ -1,4 +1,4 @@
-<img width="2077" height="844" alt="image" src="https://github.com/user-attachments/assets/3faccf5b-1d11-47f2-9a42-e35977a8c58e" />#                     python批量爬取抖音收藏夹图片和视频
+#                     Python批量爬取抖音收藏夹图片和视频
 
  **目录**
 

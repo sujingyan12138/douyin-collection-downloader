@@ -20,8 +20,6 @@
 
 
 
-
-
 # 功能展示
 
 # ![img](https://i-blog.csdnimg.cn/direct/88e8469c57a9462b8c197a2f6365d800.png)![点击并拖拽以移动](data:image/gif;base64,R0lGODlhAQABAPABAP///wAAACH5BAEKAAAALAAAAAABAAEAAAICRAEAOw==)![img](https://i-blog.csdnimg.cn/direct/8dfaca673131451b8ea94e44ea27457f.png)![点击并拖拽以移动](data:image/gif;base64,R0lGODlhAQABAPABAP///wAAACH5BAEKAAAALAAAAAABAAEAAAICRAEAOw==)编代码
@@ -360,4 +358,4 @@ verify_downloads()
 
 可以在代码的同级目录下建立  抖音收藏夹下载  的文件夹，视频和图片会自动按照博主名称保存在里面
 
-### ![img](https://i-blog.csdnimg.cn/direct/3bdef7ae5e6d4334aea57f434426a625.png)![点击并拖拽以移动](data:image/gif;base64,R0lGODlhAQABAPABAP///wAAACH5BAEKAAAALAAAAAABAAEAAAICRAEAOw==)
+### ![img](https://i-blog.csdnimg.cn/direct/3bdef7ae5e6d4334aea57f434426a625.png)

@@ -4,8 +4,6 @@
 
 [功能展示](#功能展示)
 
-[代码](#代码)
-
 [如何使用](#如何使用)
 
 [环境准备](#环境准备)
@@ -16,6 +14,8 @@
 
 [User-Agent、Cookie、Referer](#User-Agent、Cookie、Referer)
 
+[代码](#代码)
+
 ------
 
 
@@ -23,7 +23,73 @@
 # 功能展示
 
 # ![img](https://i-blog.csdnimg.cn/direct/88e8469c57a9462b8c197a2f6365d800.png)![img](https://i-blog.csdnimg.cn/direct/8dfaca673131451b8ea94e44ea27457f.png)
-代码
+
+# 如何使用
+
+## 环境准备
+
+具体可以参考[pycharm从安装到全副武装，学起来才嗖嗖的快，图片超多，因为过度详细！_pycharm下载和环境配置-CSDN博客](https://blog.csdn.net/weixin_46211269/article/details/119934323?ops_request_misc=%7B%22request%5Fid%22%3A%22902aa9ca8d1faeea80b5196c2b12f4b7%22%2C%22scm%22%3A%2220140713.130102334..%22%7D&request_id=902aa9ca8d1faeea80b5196c2b12f4b7&biz_id=0&utm_medium=distribute.pc_search_result.none-task-blog-2~all~top_positive~default-1-119934323-null-null.142^v102^pc_search_result_base1&utm_term=pycharm安装教程&spm=1018.2226.3001.4187)
+
+#### 核心环境：安装 Python
+
+1. 下载 Python 安装包：
+
+   前往Python 官方下载地址，下拉页面选择对应你系统的版本（Windows 优先选「Windows Installer (64-bit)」，Mac 选「macOS 64-bit universal2 installer」），建议下载 3.8 及以上版本（兼容性更好，避免语法报错）。
+
+2. 安装 Python：
+
+   - Windows：双击安装包，**务必勾选界面底部的「Add Python to PATH」**（添加到系统环境变量，后续终端才能直接调用 python 命令），然后点击「Install Now」默认安装，或选择「Customize Installation」自定义安装路径（建议安装到非 C 盘，如`D:\Python310`）。
+
+#### 安装脚本所需的第三方依赖库
+
+这份脚本用到了 2 个第三方库（`requests` 用于发送网络请求，`tqdm` 用于显示进度条），Python 自带的标准库（`json`、`os`、`hashlib`）无需额外安装，步骤如下：
+
+1. 打开终端（保持终端窗口正常运行，不要关闭）。
+
+2. 输入对应命令安装依赖，二选一即可：
+
+   - 直接逐个安装：
+
+     ```
+     # 安装requests库
+     pip install requests
+     # 安装tqdm库
+     pip install tqdm
+     ```
+
+
+
+## 指定要下载的文件夹
+
+在代码里面填入以下用户自己的参数即可
+
+### 收藏夹id
+
+1. 进入收藏夹页面
+2. f12 --> 网络(network) --> 筛选器输入`list`
+3. 刷新页面
+    ![img](https://i-blog.csdnimg.cn/direct/39cfd3f1481a476c94a0e19e658121c2.png)​
+4. 将想要下载的收藏夹名字 一个一个试着搜索，搜索到了的文件就是对应收藏夹url响应内容
+    ![img](https://i-blog.csdnimg.cn/direct/3643cd2fbea54e62b493a805880bd1d5.png)
+
+
+### User-Agent、Cookie、Referer
+
+还是刚刚找到收藏夹id的位置，点击标头，请求标头，里面就有这三个参数了，复制到代码里面即可
+
+![img](https://i-blog.csdnimg.cn/direct/691e41714cbd4ba0ab8ea32f978ef791.png)
+
+![img](https://i-blog.csdnimg.cn/direct/3cf870d627f244af8108378406fdf4f6.png)
+
+
+
+### ![img](https://i-blog.csdnimg.cn/direct/8a86ca1e56fe49708ea45403e9214d9e.png)
+
+可以在代码的同级目录下建立  抖音收藏夹下载  的文件夹，视频和图片会自动按照博主名称保存在里面
+
+![img](https://i-blog.csdnimg.cn/direct/3bdef7ae5e6d4334aea57f434426a625.png)
+
+# 代码
 
 ```python
 import requests
@@ -321,40 +387,3 @@ Date()
 download_media(images)
 verify_downloads()
 ```
-
-
-# 如何使用
-
-## 环境准备
-
-这里默认准备好了python的运行环境，具体可以参考[pycharm从安装到全副武装，学起来才嗖嗖的快，图片超多，因为过度详细！_pycharm下载和环境配置-CSDN博客](https://blog.csdn.net/weixin_46211269/article/details/119934323?ops_request_misc=%7B%22request%5Fid%22%3A%22902aa9ca8d1faeea80b5196c2b12f4b7%22%2C%22scm%22%3A%2220140713.130102334..%22%7D&request_id=902aa9ca8d1faeea80b5196c2b12f4b7&biz_id=0&utm_medium=distribute.pc_search_result.none-task-blog-2~all~top_positive~default-1-119934323-null-null.142^v102^pc_search_result_base1&utm_term=pycharm安装教程&spm=1018.2226.3001.4187)
-
-## 指定要下载的文件夹
-
-在代码里面填入以下用户自己的参数即可
-
-### 收藏夹id
-
-1. 进入收藏夹页面
-2. f12 --> 网络(network) --> 筛选器输入`list`
-3. 刷新页面
-    ![img](https://i-blog.csdnimg.cn/direct/39cfd3f1481a476c94a0e19e658121c2.png)​
-4. 将想要下载的收藏夹名字 一个一个试着搜索，搜索到了的文件就是对应收藏夹url响应内容
-    ![img](https://i-blog.csdnimg.cn/direct/3643cd2fbea54e62b493a805880bd1d5.png)
-
-
-### User-Agent、Cookie、Referer
-
-还是刚刚找到收藏夹id的位置，点击标头，请求标头，里面就有这三个参数了，复制到代码里面即可
-
-![img](https://i-blog.csdnimg.cn/direct/691e41714cbd4ba0ab8ea32f978ef791.png)
-
-### ![img](https://i-blog.csdnimg.cn/direct/3cf870d627f244af8108378406fdf4f6.png)
-
-
-
-### ![img](https://i-blog.csdnimg.cn/direct/8a86ca1e56fe49708ea45403e9214d9e.png)
-
-可以在代码的同级目录下建立  抖音收藏夹下载  的文件夹，视频和图片会自动按照博主名称保存在里面
-
-### ![img](https://i-blog.csdnimg.cn/direct/3bdef7ae5e6d4334aea57f434426a625.png)

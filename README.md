@@ -1,4 +1,4 @@
-#                     python批量爬取抖音收藏夹图片和视频
+<img width="2077" height="844" alt="image" src="https://github.com/user-attachments/assets/3faccf5b-1d11-47f2-9a42-e35977a8c58e" />#                     python批量爬取抖音收藏夹图片和视频
 
  **目录**
 
@@ -25,6 +25,9 @@
 # ![img](https://i-blog.csdnimg.cn/direct/88e8469c57a9462b8c197a2f6365d800.png)![img](https://i-blog.csdnimg.cn/direct/8dfaca673131451b8ea94e44ea27457f.png)
 
 # 如何使用
+正确导入依赖和填写用户自己登录的收藏夹id、User-Agent、Cookie、Referer到代码里即可使用
+<img width="2077" height="844" alt="image" src="https://github.com/user-attachments/assets/d44b168b-e725-440b-a04f-2bc043915468" />
+
 
 ## 环境准备
 

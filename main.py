@@ -3,306 +3,435 @@ from tqdm import tqdm
 import json
 import os
 import hashlib
+import time
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from config import ensure_config, get_headers
 
-# 全局配置
-config = None
-header = None
-collects_id = ''
 
-# 指针
-cursor = 0
-# 收藏夹url
-url = 'https://www.douyin.com/aweme/v1/web/collects/video/list/?device_platform=webapp&aid=6383&channel=channel_pc_web&collects_id={collects_id}&cursor={cursor}'
-# 收藏夹
+class DouyinDownloader:
+    """抖音收藏夹下载器 - 优化版"""
 
-images = []
+    # 视频画质优先级（从高到低）
+    VIDEO_QUALITY_PRIORITY = [
+        'play_addr_h264_1080p',
+        'play_addr_h264_720p',
+        'play_addr_h264',
+        'play_addr_1080p',
+        'play_addr_720p',
+        'play_addr',
+        'download_addr'
+    ]
 
+    def __init__(self, config, max_workers=8):
+        self.config = config
+        self.headers = get_headers(config)
+        self.collects_id = config.get('collects_id', '')
+        self.max_workers = max_workers
 
-# 处理数据
-def 日期():
-    # 指针
-    cursor = 0
-    # 意味着最多扫描 17*30 = 510 个视频（接近500个）
-    for i in range(17):
-        _url = url.format(collects_id=collects_id, cursor = cursor)
-        try:
-            dy_rs = requests.get(url=_url, headers=header, timeout=30)
-            if dy_rs.status_code != 200:
-                print(f"请求失败，状态码: {dy_rs.status_code}")
-                break
+        # 创建 Session 复用连接
+        self.session = requests.Session()
+        self.session.headers.update(self.headers)
 
-            response_data = dy_rs.json()
-            if response_data.get('aweme_list') is None or len(response_data['aweme_list']) == 0:
-                print(f"第{i+1}页没有更多数据，停止爬取")
-                break
-            else:
-                print(f"正在处理第{i+1}页，包含{len(response_data['aweme_list'])}个内容")
-                getUrl(response_data)
+        # 视频下载专用 headers
+        self.video_headers = self._get_video_headers()
+
+        # 已下载缓存（内存中）
+        self.downloaded_cache = {}  # {author_clean: set(md5)}
+        self.download_count = {}    # {author_clean: int}
+        self.cache_lock = threading.Lock()
+        self.file_lock = threading.Lock()
+
+        # 基础目录
+        self.base_dir = '抖音收藏夹下载'
+        os.makedirs(self.base_dir, exist_ok=True)
+
+        # 初始化缓存
+        self._init_cache()
+
+    def _get_video_headers(self):
+        """获取视频下载headers，从config读取User-Agent保持一致"""
+        return {
+            "User-Agent": self.headers.get("User-Agent", ""),
+            "Referer": "https://www.douyin.com/",
+            "Accept": "*/*",
+            "Accept-Encoding": "identity",
+            "Range": "bytes=0-",
+            "sec-fetch-dest": "video",
+            "sec-fetch-mode": "no-cors",
+            "sec-fetch-site": "cross-site"
+        }
+
+    def _init_cache(self):
+        """初始化已下载缓存，读取所有log.txt到内存"""
+        if not os.path.exists(self.base_dir):
+            return
+
+        for author_dir in os.listdir(self.base_dir):
+            author_path = os.path.join(self.base_dir, author_dir)
+            if os.path.isdir(author_path):
+                log_path = os.path.join(author_path, 'log.txt')
+                if os.path.exists(log_path):
+                    try:
+                        with open(log_path, 'r', encoding='utf-8') as f:
+                            md5_set = set(line.strip() for line in f if line.strip())
+                            self.downloaded_cache[author_dir] = md5_set
+                            # 计算已下载数量（排除log.txt）
+                            file_count = len([f for f in os.listdir(author_path) if f != 'log.txt'])
+                            self.download_count[author_dir] = file_count
+                    except Exception as e:
+                        print(f"读取 {author_dir} 的log.txt失败: {e}")
+
+    def clean_filename(self, filename):
+        """清理文件名，移除或替换Windows文件系统不允许的字符"""
+        invalid_chars = ['<', '>', ':', '"', '|', '?', '*', '\\', '/']
+        for char in invalid_chars:
+            filename = filename.replace(char, '_')
+        filename = filename.strip(' .')
+        return filename if filename else "未知作者"
+
+    def get_md5(self, uri):
+        """计算uri的MD5"""
+        if isinstance(uri, str):
+            uri = uri.encode("utf-8")
+        m = hashlib.md5()
+        m.update(uri)
+        return m.hexdigest()
+
+    def _is_downloaded(self, author_clean, md5_hash):
+        """检查是否已下载（线程安全）"""
+        with self.cache_lock:
+            if author_clean in self.downloaded_cache:
+                return md5_hash in self.downloaded_cache[author_clean]
+            return False
+
+    def _mark_downloaded(self, author_clean, md5_hash, author_path):
+        """标记为已下载（线程安全）"""
+        with self.cache_lock:
+            # 更新内存缓存
+            if author_clean not in self.downloaded_cache:
+                self.downloaded_cache[author_clean] = set()
+            self.downloaded_cache[author_clean].add(md5_hash)
+
+            # 更新下载计数
+            if author_clean not in self.download_count:
+                self.download_count[author_clean] = 0
+            file_num = self.download_count[author_clean]
+            self.download_count[author_clean] += 1
+
+        # 写入log.txt（文件锁保护）
+        with self.file_lock:
+            log_path = os.path.join(author_path, 'log.txt')
+            try:
+                with open(log_path, 'a', encoding='utf-8') as f:
+                    f.write(f'{md5_hash}\n')
+            except Exception as e:
+                print(f"写入log.txt失败: {e}")
+
+        return file_num
+
+    def _get_next_file_num(self, author_clean):
+        """获取下一个文件编号（线程安全）"""
+        with self.cache_lock:
+            if author_clean not in self.download_count:
+                self.download_count[author_clean] = 0
+            file_num = self.download_count[author_clean]
+            self.download_count[author_clean] += 1
+            return file_num
+
+    def fetch_collections(self):
+        """获取收藏夹列表"""
+        cursor = 0
+        all_media = []
+
+        print("正在获取收藏夹内容...")
+
+        for i in range(17):
+            url = f'https://www.douyin.com/aweme/v1/web/collects/video/list/?device_platform=webapp&aid=6383&channel=channel_pc_web&collects_id={self.collects_id}&cursor={cursor}'
+
+            try:
+                response = self.session.get(url, timeout=30)
+                if response.status_code != 200:
+                    print(f"请求失败，状态码: {response.status_code}")
+                    break
+
+                response_data = response.json()
+                aweme_list = response_data.get('aweme_list')
+
+                if not aweme_list:
+                    print(f"第{i+1}页没有更多数据，停止爬取")
+                    break
+
+                print(f"正在处理第{i+1}页，包含{len(aweme_list)}个内容")
+                media_list = self._parse_aweme_list(aweme_list)
+                all_media.extend(media_list)
                 cursor += 30
 
                 # 添加延迟，避免请求过于频繁
-                import time
                 time.sleep(1)
 
-        except Exception as e:
-            print(f"处理第{i+1}页时出错: {e}")
-            break
+            except Exception as e:
+                print(f"处理第{i+1}页时出错: {e}")
+                break
 
-# 获取视频/图片url
-def getUrl(res_json):
-    for video in tqdm(res_json['aweme_list'], desc='获取视频/图片url'):
-        # print(json.dumps(video, sort_keys=True, indent=2))
-        # 获取作者 name
-        author = video['author']['nickname']
-        # 获取文案
-        # ptitle = video['desc']
-        if video.get('images'):  # 图文类型
-            for img in video['images']:
-                # 添加安全检查，确保url_list存在且不为空
-                if img.get('url_list') and len(img['url_list']) > 0:
-                    images.append({"author": author, "type": "jpg", "uri": img['uri'], "url": img['url_list'][0]})
+        print(f"共获取到 {len(all_media)} 个媒体文件")
+        return all_media
+
+    def _parse_aweme_list(self, aweme_list):
+        """解析抖音返回的视频/图片列表"""
+        media_list = []
+
+        for video in tqdm(aweme_list, desc='解析媒体信息'):
+            author = video['author']['nickname']
+
+            if video.get('images'):  # 图文类型
+                for img in video['images']:
+                    if img.get('url_list') and len(img['url_list']) > 0:
+                        media_list.append({
+                            "author": author,
+                            "type": "jpg",
+                            "uri": img['uri'],
+                            "url": img['url_list'][0]
+                        })
+
+            elif video.get('video'):  # 视频类型
+                video_urls = self._get_highest_quality_video(video['video'])
+
+                if video_urls:
+                    media_list.append({
+                        "author": author,
+                        "type": "mp4",
+                        "uri": video['video'].get('play_addr_h264', {}).get('uri', 'unknown'),
+                        "url": video_urls[0],
+                        "backup_urls": video_urls[1:]
+                    })
                 else:
-                    print(f"警告: 图片 {img.get('uri', 'unknown')} 的url_list为空或不存在")
-        elif video.get('video'):  # 视频类型
-            # 尝试多种视频URL格式
-            video_urls = []
-            
-            # 方法1: play_addr_h264
-            if video['video'].get('play_addr_h264') and video['video']['play_addr_h264'].get('url_list'):
-                for url_item in video['video']['play_addr_h264']['url_list']:
-                    if url_item and url_item.startswith('http'):
-                        video_urls.append(url_item)
-            
-            # 方法2: play_addr
-            if video['video'].get('play_addr') and video['video']['play_addr'].get('url_list'):
-                for url_item in video['video']['play_addr']['url_list']:
-                    if url_item and url_item.startswith('http'):
-                        video_urls.append(url_item)
-            
-            # 方法3: download_addr
-            if video['video'].get('download_addr') and video['video']['download_addr'].get('url_list'):
-                for url_item in video['video']['download_addr']['url_list']:
-                    if url_item and url_item.startswith('http'):
-                        video_urls.append(url_item)
-            
-            # 如果找到视频URL，添加到下载列表
-            if video_urls:
-                # 选择第一个可用的URL
-                images.append({"author": author, "type": "mp4", "uri": video['video'].get('play_addr_h264', {}).get('uri', 'unknown'),
-                               "url": video_urls[0], "backup_urls": video_urls[1:]})
-            else:
-                print(f"警告: 视频 {video.get('aweme_id', 'unknown')} 没有可用的下载URL")
-            
-            # 封面图片url - 添加安全检查
-            if video['video'].get('cover') and video['video']['cover'].get('url_list') and len(video['video']['cover']['url_list']) > 1:
-                images.append({"author": author, "type": "jpg", "uri": video['video']['cover']['uri'],
-                               "url": video['video']['cover']['url_list'][1]})
-            else:
-                print(f"警告: 视频 {video.get('aweme_id', 'unknown')} 的cover url_list为空或元素不足")
+                    print(f"警告: 视频 {video.get('aweme_id', 'unknown')} 没有可用的下载URL")
 
+                # 封面图片
+                if video['video'].get('cover') and video['video']['cover'].get('url_list'):
+                    cover_urls = video['video']['cover']['url_list']
+                    # 选择较高质量的封面
+                    cover_url = cover_urls[1] if len(cover_urls) > 1 else cover_urls[0]
+                    media_list.append({
+                        "author": author,
+                        "type": "jpg",
+                        "uri": video['video']['cover']['uri'],
+                        "url": cover_url
+                    })
 
-# 下载图片和视频
-def download_media(images):
-    if len(images) == 0:
-        print("未获取到 视频url")
-        return
-    
-    print(f"总共需要下载 {len(images)} 个文件")
-    
-    # 创建抖音收藏夹下载文件夹 在脚本当前目录
-    if not os.path.exists('抖音收藏夹下载'):
-        os.makedirs('抖音收藏夹下载')
+        return media_list
 
-    # 统计下载结果
-    success_count = 0
-    failed_count = 0
-    
-    for im in tqdm(images, desc='正在下载'):
-        try:
-            # 清理作者名称，确保文件夹名称合法
-            clean_author = clean_filename(im["author"])
-            # 创建 博主文件夹，存放同个博主的内容
-            if not os.path.exists(f'抖音收藏夹下载/{clean_author}'):
-                os.makedirs(f'抖音收藏夹下载/{clean_author}')
-                open(f'抖音收藏夹下载/{clean_author}/log.txt', "w").close()
+    def _get_highest_quality_video(self, video_data):
+        """获取最高画质的视频URL列表"""
+        all_urls = []
 
-            # 判断 当前url是否已经下载过
-            downloaded = False
-            md5 = f'{get_md5(im["uri"])}\n'
-            with open(f'抖音收藏夹下载/{clean_author}/log.txt', 'r', encoding='utf-8') as f:
-                file_lines = f.readlines()
-            for _md5 in file_lines:
-                if _md5 == md5:
-                    downloaded = True
-                    break
+        # 按优先级检查各种画质
+        for quality_key in self.VIDEO_QUALITY_PRIORITY:
+            if video_data.get(quality_key) and video_data[quality_key].get('url_list'):
+                urls = [url for url in video_data[quality_key]['url_list'] if url and url.startswith('http')]
+                if urls:
+                    all_urls.extend(urls)
+                    # 如果找到了高优先级的，继续收集但优先使用高优先级的
+                    # 不break，继续收集其他作为备用
 
-            # 如果没下载过则下载
-            if not downloaded:
-                num_png = len(os.listdir(f'抖音收藏夹下载/{clean_author}'))
-                file_path = f'抖音收藏夹下载/{clean_author}/{num_png}.{im["type"]}'
-                
-                # 添加重试机制
-                max_retries = 3
-                for retry in range(max_retries):
-                    try:
-                        # 为视频下载添加特殊的请求头
-                        if im["type"] == "mp4":
-                            video_headers = {
-                                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
-                                "Referer": "https://www.douyin.com/",
-                                "Accept": "*/*",
-                                "Accept-Encoding": "identity",
-                                "Range": "bytes=0-",
-                                "sec-fetch-dest": "video",
-                                "sec-fetch-mode": "no-cors",
-                                "sec-fetch-site": "cross-site"
-                            }
-                            
-                            # 尝试主URL
-                            current_url = im["url"]
-                            response = requests.get(url=current_url, headers=video_headers, timeout=60, stream=True)
-                            
-                            # 如果主URL失败，尝试备用URL
-                            if response.status_code not in [200, 206] and im.get("backup_urls"):
-                                for backup_url in im["backup_urls"]:
-                                    print(f"主URL失败，尝试备用URL: {backup_url[:50]}...")
-                                    response = requests.get(url=backup_url, headers=video_headers, timeout=60, stream=True)
-                                    if response.status_code in [200, 206]:
-                                        current_url = backup_url
-                                        break
+        # 去重但保持顺序
+        seen = set()
+        unique_urls = []
+        for url in all_urls:
+            if url not in seen:
+                seen.add(url)
+                unique_urls.append(url)
+
+        return unique_urls
+
+    def download_media(self, media_list):
+        """并发下载所有媒体文件"""
+        if not media_list:
+            print("未获取到媒体文件")
+            return
+
+        print(f"总共需要下载 {len(media_list)} 个文件")
+        print(f"使用 {self.max_workers} 个线程并发下载")
+
+        success_count = 0
+        failed_count = 0
+        skipped_count = 0
+
+        # 使用线程池并发下载
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            # 提交所有任务
+            future_to_media = {executor.submit(self._download_single, media): media for media in media_list}
+
+            # 处理结果
+            for future in tqdm(as_completed(future_to_media), total=len(media_list), desc='下载进度'):
+                media = future_to_media[future]
+                try:
+                    result = future.result()
+                    if result == 'success':
+                        success_count += 1
+                    elif result == 'skipped':
+                        skipped_count += 1
+                    else:
+                        failed_count += 1
+                except Exception as e:
+                    print(f"下载 {media.get('uri', 'unknown')} 时出错: {e}")
+                    failed_count += 1
+
+        print(f"\n下载完成！成功: {success_count} 个，跳过: {skipped_count} 个，失败: {failed_count} 个")
+
+    def _download_single(self, media):
+        """下载单个媒体文件（线程安全）"""
+        author = media['author']
+        media_type = media['type']
+        uri = media['uri']
+        url = media['url']
+        backup_urls = media.get('backup_urls', [])
+
+        # 清理作者名称
+        author_clean = self.clean_filename(author)
+        author_path = os.path.join(self.base_dir, author_clean)
+
+        # 计算MD5
+        md5_hash = self.get_md5(uri)
+
+        # 检查是否已下载
+        if self._is_downloaded(author_clean, md5_hash):
+            return 'skipped'
+
+        # 确保作者目录存在
+        os.makedirs(author_path, exist_ok=True)
+
+        # 确保log.txt存在
+        log_path = os.path.join(author_path, 'log.txt')
+        if not os.path.exists(log_path):
+            with open(log_path, 'w', encoding='utf-8') as f:
+                pass
+
+        # 获取文件编号
+        file_num = self._get_next_file_num(author_clean)
+        file_path = os.path.join(author_path, f'{file_num}.{media_type}')
+
+        # 尝试下载
+        max_retries = 3
+        for retry in range(max_retries):
+            try:
+                current_url = url
+                headers = self.video_headers if media_type == 'mp4' else self.headers
+
+                if media_type == 'mp4':
+                    # 视频下载（流式）
+                    response = self.session.get(current_url, headers=headers, timeout=60, stream=True)
+
+                    # 如果主URL失败，尝试备用URL
+                    if response.status_code not in [200, 206] and backup_urls:
+                        for backup_url in backup_urls:
+                            response = self.session.get(backup_url, headers=headers, timeout=60, stream=True)
+                            if response.status_code in [200, 206]:
+                                current_url = backup_url
+                                break
+                else:
+                    # 图片下载
+                    response = self.session.get(current_url, timeout=30)
+
+                if response.status_code in [200, 206]:
+                    # 流式写入文件
+                    file_size = 0
+                    with open(file_path, 'wb') as f:
+                        if media_type == 'mp4':
+                            for chunk in response.iter_content(chunk_size=8192):
+                                if chunk:
+                                    f.write(chunk)
+                                    file_size += len(chunk)
                         else:
-                            response = requests.get(url=im["url"], timeout=30)
-                        
-                        if response.status_code == 200 or response.status_code == 206:
-                            # 检查文件大小，过滤掉过小的文件（可能是错误页面）
-                            content_length = len(response.content)
-                            if im["type"] == "mp4" and content_length < 1024:  # 视频小于1KB可能是错误
-                                print(f"警告: 视频文件过小({content_length}字节)，可能下载失败")
-                                if retry < max_retries - 1 and im.get("backup_urls"):
-                                    print(f"尝试备用URL...")
-                                    continue
+                            f.write(response.content)
+                            file_size = len(response.content)
+
+                    # 检查文件大小
+                    if media_type == 'mp4' and file_size < 1024:
+                        print(f"警告: 视频文件过小({file_size}字节)，可能下载失败")
+                        if retry < max_retries - 1:
+                            continue
+                        else:
+                            return 'failed'
+
+                    # 标记为已下载
+                    self._mark_downloaded(author_clean, md5_hash, author_path)
+                    return 'success'
+                else:
+                    print(f"下载失败，状态码: {response.status_code}")
+                    if retry == max_retries - 1:
+                        return 'failed'
+
+            except Exception as e:
+                if retry == max_retries - 1:
+                    print(f"下载失败: {e}")
+                    return 'failed'
+                else:
+                    time.sleep(2)  # 重试前等待
+
+        return 'failed'
+
+    def verify_downloads(self):
+        """验证下载的文件（只验证本次新增的）"""
+        print("\n正在验证下载的文件...")
+
+        total_files = 0
+        valid_files = 0
+        invalid_files = 0
+
+        for author_dir in os.listdir(self.base_dir):
+            author_path = os.path.join(self.base_dir, author_dir)
+            if os.path.isdir(author_path):
+                for file_name in os.listdir(author_path):
+                    if file_name != 'log.txt':
+                        file_path = os.path.join(author_path, file_name)
+                        total_files += 1
+
+                        try:
+                            file_size = os.path.getsize(file_path)
+                            if file_name.endswith('.mp4'):
+                                if file_size > 102400:  # > 100KB
+                                    valid_files += 1
                                 else:
-                                    failed_count += 1
-                                    break
-                            
-                            with open(file_path, 'wb') as f:
-                                f.write(response.content)
-                            
-                            # 记录下载成功
-                            with open(f'抖音收藏夹下载/{clean_author}/log.txt', 'a', encoding='utf-8') as f:
-                                f.write(f'{md5}')
-                            
-                            success_count += 1
-                            break  # 下载成功，跳出重试循环
-                        else:
-                            print(f"下载失败，状态码: {response.status_code}")
-                            if retry == max_retries - 1:
-                                failed_count += 1
-                            
-                    except Exception as e:
-                        if retry == max_retries - 1:
-                            print(f"下载失败: {e}")
-                            failed_count += 1
-                        else:
-                            print(f"第{retry+1}次重试下载...")
-                            import time
-                            time.sleep(2)  # 重试前等待2秒
-                            
-        except Exception as e:
-            print(f"处理文件时出错: {e}")
-            failed_count += 1
-    
-    print(f"\n下载完成！成功: {success_count} 个，失败: {failed_count} 个")
-
-
-def get_md5(url):
-    # 因为python3运行内存中编码方式为unicode，所以将url md5压缩之前首先需要编码为utf8。
-    if isinstance(url, str):
-        url = url.encode("utf-8")
-    m = hashlib.md5()
-    m.update(url)
-    return m.hexdigest()
-
-
-def clean_filename(filename):
-    """清理文件名，移除或替换Windows文件系统不允许的字符"""
-    # Windows不允许的字符: < > : " | ? * \ /
-    invalid_chars = ['<', '>', ':', '"', '|', '?', '*', '\\', '/']
-    for char in invalid_chars:
-        filename = filename.replace(char, '_')
-    # 移除首尾的空格和点
-    filename = filename.strip(' .')
-    # 如果文件名为空，使用默认名称
-    if not filename:
-        filename = "未知作者"
-    return filename
-
-
-def verify_downloads():
-    """验证下载的文件是否完整"""
-    print("\n正在验证下载的文件...")
-    
-    if not os.path.exists('抖音收藏夹下载'):
-        print("下载文件夹不存在")
-        return
-    
-    total_files = 0
-    valid_files = 0
-    invalid_files = 0
-    
-    for author_dir in os.listdir('抖音收藏夹下载'):
-        author_path = os.path.join('抖音收藏夹下载', author_dir)
-        if os.path.isdir(author_path):
-            for file_name in os.listdir(author_path):
-                if file_name != 'log.txt':
-                    file_path = os.path.join(author_path, file_name)
-                    total_files += 1
-                    
-                    try:
-                        file_size = os.path.getsize(file_path)
-                        if file_name.endswith('.mp4'):
-                            # 视频文件应该大于100KB
-                            if file_size > 102400:
-                                valid_files += 1
+                                    print(f"无效视频文件: {author_dir}/{file_name} (大小: {file_size}字节)")
+                                    invalid_files += 1
+                            elif file_name.endswith('.jpg'):
+                                if file_size > 10240:  # > 10KB
+                                    valid_files += 1
+                                else:
+                                    print(f"无效图片文件: {author_dir}/{file_name} (大小: {file_size}字节)")
+                                    invalid_files += 1
                             else:
-                                print(f"无效视频文件: {author_dir}/{file_name} (大小: {file_size}字节)")
-                                invalid_files += 1
-                        elif file_name.endswith('.jpg'):
-                            # 图片文件应该大于10KB
-                            if file_size > 10240:
                                 valid_files += 1
-                            else:
-                                print(f"无效图片文件: {author_dir}/{file_name} (大小: {file_size}字节)")
-                                invalid_files += 1
-                        else:
-                            valid_files += 1
-                    except Exception as e:
-                        print(f"检查文件时出错 {file_path}: {e}")
-                        invalid_files += 1
-    
-    print(f"文件验证完成！")
-    print(f"总文件数: {total_files}")
-    print(f"有效文件: {valid_files}")
-    print(f"无效文件: {invalid_files}")
+                        except Exception as e:
+                            print(f"检查文件时出错 {file_path}: {e}")
+                            invalid_files += 1
+
+        print(f"文件验证完成！")
+        print(f"总文件数: {total_files}")
+        print(f"有效文件: {valid_files}")
+        print(f"无效文件: {invalid_files}")
 
 
 def main():
-    global config, header, collects_id
-
     # 加载配置
     config = ensure_config()
     if not config:
         print("配置加载失败，程序退出")
         return
 
-    header = get_headers(config)
-    collects_id = config.get('collects_id', '')
+    # 创建下载器
+    downloader = DouyinDownloader(config, max_workers=8)
 
-    # 开始下载
-    日期()
-    download_media(images)
-    verify_downloads()
+    # 获取收藏夹内容
+    media_list = downloader.fetch_collections()
+
+    # 下载媒体文件
+    downloader.download_media(media_list)
+
+    # 验证下载
+    downloader.verify_downloads()
 
 
 if __name__ == '__main__':

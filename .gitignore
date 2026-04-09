@@ -198,6 +198,7 @@ cython_debug/
 #  Cursor is an AI-powered code editor. `.cursorignore` specifies files/directories to
 #  exclude from AI features like autocomplete and code analysis. Recommended for sensitive data
 #  refer to https://docs.cursor.com/context/ignore-files
+.cursor/
 .cursorignore
 .cursorindexingignore
 
@@ -229,3 +230,6 @@ __marimo__/
 
 # 忽略IDE配置文件夹
 .idea/
+
+# 忽略用户配置文件（包含敏感信息如Cookie）
+config.json

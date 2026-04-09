@@ -3,15 +3,13 @@ from tqdm import tqdm
 import json
 import os
 import hashlib
+from config import ensure_config, get_headers
 
-# 收藏夹请求头
-header = {
-    "User-Agent": "",
-    "Referer": "",
-    "Cookie": ""
-}
-# 收藏夹id
+# 全局配置
+config = None
+header = None
 collects_id = ''
+
 # 指针
 cursor = 0
 # 收藏夹url
@@ -33,7 +31,7 @@ def 日期():
             if dy_rs.status_code != 200:
                 print(f"请求失败，状态码: {dy_rs.status_code}")
                 break
-                
+
             response_data = dy_rs.json()
             if response_data.get('aweme_list') is None or len(response_data['aweme_list']) == 0:
                 print(f"第{i+1}页没有更多数据，停止爬取")
@@ -42,11 +40,11 @@ def 日期():
                 print(f"正在处理第{i+1}页，包含{len(response_data['aweme_list'])}个内容")
                 getUrl(response_data)
                 cursor += 30
-                
+
                 # 添加延迟，避免请求过于频繁
                 import time
                 time.sleep(1)
-                
+
         except Exception as e:
             print(f"处理第{i+1}页时出错: {e}")
             break
@@ -289,6 +287,23 @@ def verify_downloads():
     print(f"无效文件: {invalid_files}")
 
 
-Date()
-download_media(images)
-verify_downloads()
+def main():
+    global config, header, collects_id
+
+    # 加载配置
+    config = ensure_config()
+    if not config:
+        print("配置加载失败，程序退出")
+        return
+
+    header = get_headers(config)
+    collects_id = config.get('collects_id', '')
+
+    # 开始下载
+    日期()
+    download_media(images)
+    verify_downloads()
+
+
+if __name__ == '__main__':
+    main()

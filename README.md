@@ -26,7 +26,9 @@
 
 # 如何使用
 正确导入依赖和填写用户登录抖音后通过开发者工具获取的收藏夹id、User-Agent、Cookie、Referer到代码里即可使用
-<img width="2040" height="1000" alt="image" src="https://github.com/user-attachments/assets/73d51516-1169-4a3c-bbe1-4b89ff6373ed" />
+<img width="1018" height="469" alt="image" src="https://github.com/user-attachments/assets/534e6aa9-5138-402f-bb34-7d07edc938fa" />
+<img width="1633" height="469" alt="image" src="https://github.com/user-attachments/assets/94a193af-ffd3-420b-921b-4aef8058ac57" />
+
 
 
 

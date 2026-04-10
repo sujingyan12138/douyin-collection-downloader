@@ -59,4 +59,25 @@ python main.py
 - 8线程并发下载
 - 断点续传，已下载内容自动跳过
 
+## 打包 EXE
+
+如果你希望别人不安装 Python，直接双击使用，可以在项目根目录执行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\build_exe.ps1
+```
+
+生成完成后，EXE 在：
+
+```text
+dist\douyin-collection-downloader.exe
+```
+
+说明：
+
+- 程序运行时会在 EXE 同目录生成 `config.json`
+- 下载内容会保存到 EXE 同目录下的 `抖音收藏夹下载` 文件夹
+- 首次运行仍然需要本机可用的 Edge 浏览器，用于登录抖音
+- 如果你只想安装打包依赖，可以执行 `pip install -r requirements-build.txt`
+
 

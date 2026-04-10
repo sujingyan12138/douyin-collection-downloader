@@ -7,7 +7,7 @@ import time
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from config import ensure_config, get_headers, get_config
-from config import DEFAULT_USER_AGENTS, DEFAULT_REFERER
+from config import DEFAULT_USER_AGENTS, DEFAULT_REFERER, APP_DIR
 
 
 class DouyinDownloader:
@@ -44,7 +44,7 @@ class DouyinDownloader:
         self.file_lock = threading.Lock()
 
         # 基础目录
-        self.base_dir = '抖音收藏夹下载'
+        self.base_dir = os.path.join(APP_DIR, '抖音收藏夹下载')
         os.makedirs(self.base_dir, exist_ok=True)
 
         # 初始化缓存

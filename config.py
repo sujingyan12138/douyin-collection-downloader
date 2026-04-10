@@ -3,9 +3,11 @@ import os
 import random
 import sqlite3
 import shutil
+import sys
 import tempfile
 
-CONFIG_FILE = 'config.json'
+APP_DIR = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.abspath(__file__))
+CONFIG_FILE = os.path.join(APP_DIR, 'config.json')
 
 # 浏览器支持
 try:

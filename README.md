@@ -72,10 +72,13 @@
 ### 收藏夹id
 
 1. 进入收藏夹页面
-2. f12 --> 网络(network) --> 筛选器输入`list`
+2. f12 --> 网络(network) --> 筛选器输入`list`或者'collects'
 3. 刷新页面
+4.  将想要下载的收藏夹名字 一个一个试着搜索，搜索到了的文件就是对应收藏夹url响应内容
+   <img width="1249" height="598" alt="PixPin_2026-04-10_08-44-39" src="https://github.com/user-attachments/assets/04753372-d034-478c-a795-8206a2ee8b5f" />
+
     ![img](https://i-blog.csdnimg.cn/direct/39cfd3f1481a476c94a0e19e658121c2.png)​
-4. 将想要下载的收藏夹名字 一个一个试着搜索，搜索到了的文件就是对应收藏夹url响应内容
+
     ![img](https://i-blog.csdnimg.cn/direct/3643cd2fbea54e62b493a805880bd1d5.png)
 
 

@@ -228,7 +228,8 @@ __marimo__/
 *.downloading
 
 # 忽略抖音下载的字幕/描述文件
-*.txt
+# 只忽略下载目录里的 txt，不忽略项目根目录的 requirements.txt
+抖音收藏夹下载/*.txt
 *.srt
 *.ass
 

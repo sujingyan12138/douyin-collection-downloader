@@ -6,7 +6,8 @@ import hashlib
 import time
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from config import ensure_config, get_headers
+from config import ensure_config, get_headers, get_config
+from config import DEFAULT_USER_AGENTS, DEFAULT_REFERER
 
 
 class DouyinDownloader:
@@ -139,12 +140,88 @@ class DouyinDownloader:
             self.download_count[author_clean] += 1
             return file_num
 
+    def fetch_all_collections(self):
+        """获取用户所有收藏夹列表"""
+        print("正在获取收藏夹列表...")
+
+        # 尝试多个可能的API端点
+        endpoints = [
+            'https://www.douyin.com/aweme/v1/web/collects/list/',
+            'https://www.douyin.com/aweme/v1/web/collects/user/all/',
+            'https://www.douyin.com/aweme/v1/web/collects/query/',
+        ]
+
+        for endpoint in endpoints:
+            try:
+                url = f'{endpoint}?device_platform=webapp&aid=6383&channel=channel_pc_web'
+                response = self.session.get(url, timeout=30)
+
+                if response.status_code == 200:
+                    response_data = response.json()
+                    collections = self._parse_collections_list(response_data)
+                    if collections:
+                        print(f"成功获取到 {len(collections)} 个收藏夹")
+                        return collections
+            except Exception as e:
+                print(f"尝试端点 {endpoint} 时出错: {e}")
+                continue
+
+        # 如果API端点都失败，提供备选方案
+        print("\n无法自动获取收藏夹列表，请使用备选方案：")
+        print("1. 手动输入收藏夹ID")
+        print("2. 或者尝试在浏览器中打开收藏夹页面，然后刷新页面")
+        print("   在开发者工具的Network标签中查找 collects/video/list 请求")
+        print("   从URL参数中复制 collects_id 的值\n")
+
+        return []
+
+    def _parse_collections_list(self, response_data):
+        """解析收藏夹列表响应"""
+        collections = []
+
+        # 尝试多种可能的响应结构
+        if isinstance(response_data, dict):
+            # 结构1: data -> collects 或类似
+            data = response_data.get('data', {})
+            if isinstance(data, dict):
+                collects_list = data.get('collects', []) or data.get('collects_list', [])
+                if collects_list:
+                    for item in collects_list:
+                        if isinstance(item, dict):
+                            coll_id = item.get('collects_id') or item.get('id') or item.get('coll_id')
+                            coll_name = item.get('collects_name') or item.get('name') or item.get('title')
+                            if coll_id and coll_name:
+                                collections.append({
+                                    'id': str(coll_id),
+                                    'name': coll_name
+                                })
+
+            # 结构2: 直接在response_data中
+            if not collections:
+                collects_list = response_data.get('collects', []) or response_data.get('collects_list', [])
+                if collects_list:
+                    for item in collects_list:
+                        if isinstance(item, dict):
+                            coll_id = item.get('collects_id') or item.get('id') or item.get('coll_id')
+                            coll_name = item.get('collects_name') or item.get('name') or item.get('title')
+                            if coll_id and coll_name:
+                                collections.append({
+                                    'id': str(coll_id),
+                                    'name': coll_name
+                                })
+
+        return collections
+
     def fetch_collections(self):
-        """获取收藏夹列表"""
+        """获取指定收藏夹的内容"""
+        if not self.collects_id:
+            print("错误: 未设置收藏夹ID")
+            return []
+
         cursor = 0
         all_media = []
 
-        print("正在获取收藏夹内容...")
+        print(f"正在获取收藏夹内容 (ID: {self.collects_id})...")
 
         for i in range(17):
             url = f'https://www.douyin.com/aweme/v1/web/collects/video/list/?device_platform=webapp&aid=6383&channel=channel_pc_web&collects_id={self.collects_id}&cursor={cursor}'
@@ -415,13 +492,28 @@ class DouyinDownloader:
 
 
 def main():
+    # 先创建一个临时下载器用于配置（只初始化Session，不初始化缓存）
+    # 创建一个临时配置用于初始化
+    temp_config = get_config() or {}
+    if not temp_config.get('user_agent'):
+        temp_config['user_agent'] = DEFAULT_USER_AGENTS[0]
+    if not temp_config.get('referer'):
+        temp_config['referer'] = DEFAULT_REFERER
+
+    # 创建临时下载器用于获取收藏夹列表
+    temp_downloader = None
+    try:
+        temp_downloader = DouyinDownloader(temp_config, max_workers=1)
+    except Exception:
+        pass
+
     # 加载配置
-    config = ensure_config()
+    config = ensure_config(temp_downloader)
     if not config:
         print("配置加载失败，程序退出")
         return
 
-    # 创建下载器
+    # 创建正式下载器
     downloader = DouyinDownloader(config, max_workers=8)
 
     # 获取收藏夹内容

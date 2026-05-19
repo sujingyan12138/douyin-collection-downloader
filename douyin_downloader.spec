@@ -1,9 +1,21 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-from PyInstaller.utils.hooks import collect_submodules
-
-hiddenimports = collect_submodules("browser_cookie3")
-hiddenimports += collect_submodules("selenium")
+hiddenimports = [
+    "browser_cookie3",
+    "selenium",
+    "selenium.webdriver",
+    "selenium.webdriver.chrome.webdriver",
+    "selenium.webdriver.chrome.options",
+    "selenium.webdriver.chrome.service",
+    "selenium.webdriver.chromium.webdriver",
+    "selenium.webdriver.chromium.options",
+    "selenium.webdriver.chromium.remote_connection",
+    "selenium.webdriver.chromium.service",
+    "selenium.webdriver.edge.webdriver",
+    "selenium.webdriver.edge.options",
+    "selenium.webdriver.edge.service",
+    "websocket",
+]
 
 datas = [
     ("config.json.example", "."),
@@ -18,7 +30,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=["setuptools"],
     noarchive=False,
     optimize=0,
 )

@@ -5,6 +5,7 @@ import os
 import hashlib
 import time
 import threading
+import socket
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from config import ensure_config, get_headers, get_config
 from config import DEFAULT_USER_AGENTS, DEFAULT_REFERER, APP_DIR
@@ -491,6 +492,22 @@ class DouyinDownloader:
         print(f"无效文件: {invalid_files}")
 
 
+def check_python_network_stack():
+    """检查 Python 网络栈是否可用"""
+    try:
+        test_socket = socket.socket()
+        test_socket.close()
+        return True
+    except OSError as e:
+        print("\nPython 网络栈不可用，程序无法请求抖音 API 或下载文件。")
+        print(f"错误信息: {e}")
+        print("\n如果看到 WinError 10106，通常是 Windows Winsock 异常。")
+        print("请用管理员身份打开 PowerShell 或 CMD，执行：")
+        print("  netsh winsock reset")
+        print("然后重启电脑，再运行本程序。")
+        return False
+
+
 def main():
     # 先创建一个临时下载器用于配置（只初始化Session，不初始化缓存）
     # 创建一个临时配置用于初始化
@@ -511,6 +528,9 @@ def main():
     config = ensure_config(temp_downloader)
     if not config:
         print("配置加载失败，程序退出")
+        return
+
+    if not check_python_network_stack():
         return
 
     # 创建正式下载器
